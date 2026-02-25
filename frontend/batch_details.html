@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Detail Batch {{ batch.batch_id }} - SIBIT{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active">{{ batch.batch_id }}</li>
+        </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center">
+        <h2 class="fw-bold mb-0 text-dark">Detail Batch: {{ batch.batch_id }}</h2>
+        <a href="/update-batch/{{ batch.batch_id }}" class="btn btn-primary fw-bold text-dark">
+            <i class="bi bi-camera me-1"></i> Update Progress
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Kolom Kiri: Info Batch & Chart Sederhana -->
+    <div class="col-lg-4">
+        <div class="card p-4 mb-4 shadow-sm border-0">
+            <h5 class="fw-bold mb-3 border-bottom pb-2">Informasi Umum</h5>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Varietas</span>
+                <span class="fw-bold">{{ batch.varietas }}</span>
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Lokasi Bedeng</span>
+                <span class="fw-bold">{{ batch.lokasi_bedeng }}</span>
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Tanggal Semai</span>
+                <span class="fw-bold">{{ batch.tanggal_semai.strftime('%d %b %Y') }} ({{ batch.umur_hari }} hari)</span>
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Status</span>
+                <span class="badge bg-primary-soft text-dark text-uppercase">{{ batch.status }}</span>
+            </div>
+
+            <hr class="my-3">
+
+            <div class="text-center">
+                <div class="h3 fw-bold mb-0 text-success">{{ batch.jumlah_hidup }}</div>
+                <div class="text-muted small mb-3">Dari {{ batch.jumlah_awal }} Bibit Hidup</div>
+
+                <div class="p-3 border rounded bg-light">
+                    <img src="{{ batch.qr_path }}" class="img-fluid rounded mb-2" style="max-height: 150px;">
+                    <div class="small text-muted">ID Batch: {{ batch.batch_id }}</div>
+                    <a href="{{ batch.qr_path }}" download class="btn btn-sm btn-outline-dark mt-2 w-100">Download
+                        QR</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kolom Kanan: Timeline & Galeri -->
+    <div class="col-lg-8">
+        <!-- Galeri Foto -->
+        <div class="card p-4 mb-4 shadow-sm border-0">
+            <h5 class="fw-bold mb-3 border-bottom pb-2">Galeri Foto Progres</h5>
+            {% if photos %}
+            <div class="row g-2">
+                {% for photo in photos %}
+                <div class="col-4 col-md-3">
+                    <div class="position-relative">
+                        <img src="{{ photo.photo_path }}" class="img-fluid rounded border shadow-sm"
+                            style="height: 120px; width: 100%; object-fit: cover; cursor: pointer;"
+                            data-bs-toggle="modal" data-bs-target="#photoModal{{ photo.id }}">
+                        <div class="position-absolute bottom-0 start-0 p-1 bg-dark bg-opacity-50 text-white w-100 x-small text-center"
+                            style="font-size: 0.6rem;">
+                            {{ photo.tanggal.strftime('%d/%m') }}
+                        </div>
+                    </div>
+
+                    <!-- Modal Photo -->
+                    <div class="modal fade" id="photoModal{{ photo.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-body p-0">
+                                    <img src="{{ photo.photo_path }}" class="img-fluid w-100 rounded-top">
+                                    <div class="p-3">
+                                        <div class="fw-bold">{{ photo.tanggal.strftime('%d %B %Y - %H:%M') }}</div>
+                                        <div class="text-muted">{{ photo.catatan or "Tidak ada catatan" }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-4 text-muted">
+                <i class="bi bi-camera fs-1 border rounded-circle p-3 mb-2 d-inline-block"></i>
+                <p>Belum ada foto progres.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Timeline Perubahan -->
+        <div class="card p-4 shadow-sm border-0">
+            <h5 class="fw-bold mb-3 border-bottom pb-2">Riwayat Update (Audit Log)</h5>
+            {% if logs %}
+            <div class="timeline mt-3">
+                {% for log in logs %}
+                <div class="d-flex mb-4">
+                    <div class="flex-shrink-0 mt-1">
+                        <div class="rounded-circle bg-primary-soft p-2"
+                            style="width: 40px; height: 40px; text-align: center;">
+                            <i class="bi bi-clock-history"></i>
+                        </div>
+                    </div>
+                    <div class="ms-3 border-start ps-3 pb-2">
+                        <div class="fw-bold text-dark">{{ log.aksi }}</div>
+                        <div class="small text-muted">{{ log.tanggal.strftime('%d %b %Y, %H:%M') }}</div>
+                        <div class="mt-2 p-2 bg-light rounded border-start border-primary border-4 small">
+                            {% if log.nilai_lama and log.nilai_baru %}
+                            Jumlah Hidup: <span class="text-danger">{{ log.nilai_lama }}</span> &rarr; <span
+                                class="text-success">{{ log.nilai_baru }}</span>
+                            {% endif %}
+                            {% if log.keterangan %}
+                            <div class="mt-1 font-italic">"{{ log.keterangan }}"</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-4 text-muted">
+                <p>Belum ada riwayat perubahan.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .bg-primary-soft {
+        background-color: var(--secondary-green);
+    }
+</style>
+{% endblock %}

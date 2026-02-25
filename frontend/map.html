@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Peta Bedeng - SIBIT{% endblock %}
+
+{% block content %}
+<div class="mb-4 text-center">
+    <h2 class="fw-bold">Peta Visual Bedeng Nursery</h2>
+    <p class="text-muted">Klik pada kotak bedeng untuk melihat detail batch</p>
+</div>
+
+<div class="card p-4 shadow-sm border-0 mb-4 bg-light">
+    <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
+        <div class="d-flex align-items-center">
+            <div class="rounded me-2" style="width:20px; height:20px; background-color:#2E7D32;"></div> Sehat (>90%)
+        </div>
+        <div class="d-flex align-items-center">
+            <div class="rounded me-2" style="width:20px; height:20px; background-color:#FBC02D;"></div> Perhatian
+            (70-90%)
+        </div>
+        <div class="d-flex align-items-center">
+            <div class="rounded me-2" style="width:20px; height:20px; background-color:#D32F2F;"></div> Kritis (<70%)<
+                /div>
+                <div class="d-flex align-items-center">
+                    <div class="rounded me-2" style="width:20px; height:20px; border: 2px dashed #ccc;"></div> Kosong
+                </div>
+        </div>
+
+        <!-- Peta Bedeng (Grid Layout) -->
+        <div class="row g-3">
+            {% for i in range(1, 25) %}
+            {% set bedeng_name = "Bedeng " ~ i %}
+            {% set found_batch = none %}
+            {% for b in batches %}
+            {% if b.lokasi_bedeng == bedeng_name or b.lokasi_bedeng == "Bedeng " ~ i or b.lokasi_bedeng == i|string %}
+            {% set found_batch = b %}
+            {% endif %}
+            {% endfor %}
+
+            <div class="col-4 col-md-2">
+                {% if found_batch %}
+                {% set rate = (found_batch.jumlah_hidup / found_batch.jumlah_awal * 100) %}
+                {% set color = "#2E7D32" if rate > 90 else ("#FBC02D" if rate >= 70 else "#D32F2F") %}
+                <a href="/batch-details/{{ found_batch.batch_id }}"
+                    class="card text-center d-flex flex-column justify-content-center p-2 text-decoration-none shadow-sm hover-grow"
+                    style="height: 100px; background-color: {{ color }}; color: white; border: none;">
+                    <div class="fw-bold small">{{ bedeng_name }}</div>
+                    <div class="fw-bold" style="font-size: 0.7rem;">{{ found_batch.batch_id }}</div>
+                    <div class="fw-bold">{{ rate|round(1) }}%</div>
+                </a>
+                {% else %}
+                <div class="card text-center d-flex flex-column justify-content-center p-2 border-dashed bg-white text-muted"
+                    style="height: 100px; border: 2px dashed #ccc;">
+                    <div class="fw-bold small">{{ bedeng_name }}</div>
+                    <div class="x-small">KOSONG</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <style>
+        .hover-grow {
+            transition: transform 0.2s;
+        }
+
+        .hover-grow:hover {
+            transform: scale(1.05);
+        }
+
+        .border-dashed {
+            border-style: dashed;
+        }
+    </style>
+    {% endblock %}

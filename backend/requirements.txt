@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlmodel
+qrcode[pil]
+pandas
+statsmodels
+python-multipart
+jinja2
+psycopg2-binary
+python-dotenv

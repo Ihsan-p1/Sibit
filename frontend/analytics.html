@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Analitik - SIBIT{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold">Analitik & Statistik</h2>
+    <div class="d-flex gap-2">
+        <a href="/api/reports/excel" class="btn btn-outline-success fw-bold">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export Excel
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Summary Cards -->
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-0 border-start border-4 border-primary">
+            <div class="text-muted small fw-bold">TOTAL BIBIT</div>
+            <div class="h3 fw-bold mb-0">{{ batches|sum(attribute='jumlah_awal') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-0 border-start border-4 border-success">
+            <div class="text-muted small fw-bold">TOTAL HIDUP</div>
+            <div class="h3 fw-bold mb-0 text-success">{{ batches|sum(attribute='jumlah_hidup') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-0 border-start border-4 border-danger">
+            <div class="text-muted small fw-bold">ANGKA KEMATIAN</div>
+            {% set total_awal = batches|sum(attribute='jumlah_awal') %}
+            {% set total_hidup = batches|sum(attribute='jumlah_hidup') %}
+            {% set mati = total_awal - total_hidup %}
+            <div class="h3 fw-bold mb-0 text-danger">{{ mati }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3 shadow-sm border-0 border-start border-4 border-info">
+            <div class="text-muted small fw-bold">TINGKAT KEBERHASILAN</div>
+            {% if total_awal > 0 %}
+            {% set rate = (total_hidup / total_awal * 100)|round(1) %}
+            {% else %}
+            {% set rate = 0 %}
+            {% endif %}
+            <div class="h3 fw-bold mb-0 text-info">{{ rate }}%</div>
+        </div>
+    </div>
+
+    <!-- Charts Area -->
+    <div class="col-lg-8">
+        <div class="card p-4 shadow-sm border-0">
+            <h5 class="fw-bold mb-4">Performa per Batch ID</h5>
+            <canvas id="batchChart" style="max-height: 400px;"></canvas>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card p-4 shadow-sm border-0">
+            <h5 class="fw-bold mb-4">Distribusi Varietas</h5>
+            <canvas id="varietyChart" style="max-height: 400px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Data untuk Chart
+    const batchesData = {{ batches_json| tojson | safe if batches_json else '[]' }};
+
+    // Batch Chart (Bar Chart)
+    const ctxBatch = document.getElementById('batchChart').getContext('2d');
+    new Chart(ctxBatch, {
+        type: 'bar',
+        data: {
+            labels: batchesData.map(b => b.batch_id),
+            datasets: [{
+                label: 'Jumlah Hidup',
+                data: batchesData.map(b => b.jumlah_hidup),
+                backgroundColor: 'rgba(46, 125, 50, 0.7)',
+                borderColor: '#2E7D32',
+                borderWidth: 1
+            }, {
+                label: 'Jumlah Awal',
+                data: batchesData.map(b => b.jumlah_awal),
+                backgroundColor: 'rgba(200, 200, 200, 0.3)',
+                borderColor: '#999',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+
+    // Variety Chart (Pie)
+    const varietyCount = {};
+    batchesData.forEach(b => {
+        varietyCount[b.varietas] = (varietyCount[b.varietas] || 0) + b.jumlah_hidup;
+    });
+
+    const ctxVariety = document.getElementById('varietyChart').getContext('2d');
+    new Chart(ctxVariety, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(varietyCount),
+            datasets: [{
+                data: Object.values(varietyCount),
+                backgroundColor: [
+                    '#2E7D32', '#F9A825', '#1976D2', '#C2185B', '#7B1FA2'
+                ]
+            }]
+        }
+    });
+</script>
+{% endblock %}

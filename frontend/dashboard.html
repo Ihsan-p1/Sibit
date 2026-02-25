@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SIBIT {% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold">Daftar Batch Bibit</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBatchModal">
+        <i class="bi bi-plus-circle me-1"></i> Batch Baru
+    </button>
+</div>
+
+<div class="row g-3">
+    {% for batch in batches %}
+    {# --- Logic Area --- #}
+    {% set mortality_rate = (batch.jumlah_hidup / batch.jumlah_awal * 100) if batch.jumlah_awal > 0 else 0 %}
+
+    {% set status_class = "badge-safe" %}
+    {% if batch.status == "siap jual" %}
+    {% set status_class = "badge-ready" %}
+    {% endif %}
+    {% if mortality_rate < 85 %} {% set status_class="badge-danger" %} {% endif %} {% set
+        card_border="border-danger border-2" if mortality_rate < 50 else "" %} {% if batch.umur_hari < 90 %} {% set
+        progress=(batch.umur_hari / 90 * 100) %} {% else %} {% set progress=100 %} {% endif %} {# --- HTML Area --- #}
+        <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 p-3 shadow-sm {{ card_border }}">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="flex-grow-1">
+                    <h4 class="fw-bold mb-0 text-dark">{{ batch.batch_id }}</h4>
+                    <span class="badge {{ status_class }} py-2 px-3 mt-2 text-uppercase x-small">
+                        {{ batch.status }}
+                    </span>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-link text-dark p-0 border-0" type="button" data-bs-toggle="dropdown"
+                        aria-expanded="false">
+                        <i class="bi bi-three-dots-vertical fs-4"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li><a class="dropdown-item d-flex align-items-center"
+                                href="/batch-details/{{ batch.batch_id }}"><i class="bi bi-info-circle me-2"></i> Detail
+                                & Riwayat</a></li>
+                        <li><a class="dropdown-item d-flex align-items-center" href="{{ batch.qr_path }}"
+                                download="QR_{{ batch.batch_id }}.png"><i class="bi bi-download me-2"></i> Download
+                                QR</a></li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li><a class="dropdown-item d-flex align-items-center text-primary"
+                                href="/update-batch/{{ batch.batch_id }}"><i class="bi bi-pencil-square me-2"></i>
+                                Update Data</a></li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li>
+                            <form action="/batches/delete/{{ batch.batch_id }}" method="POST"
+                                onsubmit="return confirm('Hapus batch {{ batch.batch_id }}?')">
+                                <button type="submit"
+                                    class="dropdown-item d-flex align-items-center text-danger border-0 bg-transparent w-100"><i
+                                        class="bi bi-trash me-2"></i> Hapus Batch</button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="mb-3 d-flex flex-wrap gap-1">
+                {% if batch.umur_hari >= 85 and batch.umur_hari < 90 %} <span
+                    class="badge bg-warning text-dark x-small"><i class="bi bi-hourglass-split"></i> HAMPIR SIAP</span>
+                    {% elif batch.umur_hari >= 90 %}
+                    <span class="badge bg-success x-small"><i class="bi bi-check-circle-fill"></i> SIAP JUAL</span>
+                    {% endif %}
+                    {% if mortality_rate < 85 %} <span class="badge bg-danger animate-pulse x-small"><i
+                            class="bi bi-exclamation-triangle-fill"></i> MORTALITAS TINGGI</span>
+                        {% endif %}
+            </div>
+
+            <div class="p-1 border rounded bg-light text-center mb-3">
+                <a href="/batch-details/{{ batch.batch_id }}">
+                    <img src="{{ batch.qr_path }}" class="img-fluid rounded" style="max-height: 120px; width: auto;"
+                        alt="QR">
+                </a>
+                <div class="small text-muted mt-1 x-small">Scan untuk update</div>
+            </div>
+
+            <hr class="my-2">
+
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1 small text-muted">
+                    <span>Varietas</span>
+                    <span class="fw-bold text-dark">{{ batch.varietas }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-1 small text-muted">
+                    <span>Lokasi</span>
+                    <span class="fw-bold text-dark text-end">{{ batch.lokasi_bedeng }}</span>
+                </div>
+            </div>
+
+            <div class="mt-auto">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between x-small text-muted mb-1">
+                        <span>Progress Kesiapan</span>
+                        <span>{{ batch.umur_hari }} / 90 Hari</span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width: {{ progress }}%"></div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-end mb-3">
+                    <div class="lh-sm">
+                        <div class="x-small text-muted">Hidup / Awal</div>
+                        <div
+                            class="fw-bold mb-0 {% if mortality_rate < 85 %}text-danger{% else %}text-success{% endif %}">
+                            {{ batch.jumlah_hidup }} <small class="text-muted">/ {{ batch.jumlah_awal }}</small>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="x-small text-muted">Kesehatan</div>
+                        <div class="fw-bold h5 mb-0">{{ "%.1f"|format(mortality_rate) }}%</div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <a href="/batch-details/{{ batch.batch_id }}"
+                        class="btn btn-outline-primary btn-sm flex-grow-1 py-1 fw-bold x-small">DETAILS</a>
+                    <a href="/update-batch/{{ batch.batch_id }}"
+                        class="btn btn-primary btn-sm flex-grow-1 py-1 shadow-sm text-dark fw-bold x-small">UPDATE</a>
+                </div>
+            </div>
+        </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Modal Add Batch (Simpel) -->
+<div class="modal fade" id="addBatchModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="/batches/create" method="POST" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tambah Batch Baru</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">ID Batch</label>
+                    <input type="text" name="batch_id" class="form-control" placeholder="ABC-2024-001" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Varietas</label>
+                    <input type="text" name="varietas" class="form-control" placeholder="DxP, dll" required>
+                </div>
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label">Jumlah Awal</label>
+                        <input type="number" name="jumlah_awal" class="form-control" required>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label">Lokasi Bedeng</label>
+                        <input type="text" name="lokasi_bedeng" class="form-control" placeholder="Bedeng A1" required>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-primary w-100">Simpan Batch</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
