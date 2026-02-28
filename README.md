@@ -1,75 +1,87 @@
-# SIBIT - Sistem Tracking Batch Bibit
+# SIBIT - Sistem Informasi Bibit Kelapa Sawit
 
-## Project Overview
-SIBIT (Sistem Tracking Batch Bibit) is an integrated web-based tracking and monitoring system designed to manage seedling batches from planting to distribution. It enables real-time tracking, life-cycle monitoring, and status reporting of seedlings, ensuring optimal survival rates and efficient data management.
+## Overview
 
-## Key Features
-- **Batch Management**: Seamlessly create, update, and manage details of seed batches including variety, location, and initial quantity.
-- **Real-time Tracking**: Monitor the live count and mortality rate automatically calculated throughout the seedling's lifecycle.
-- **Interactive Dashboard**: View key metrics, survival percentages, and overall progress via a centralized interactive dashboard.
-- **Audit Log System**: Track historical changes to batch statuses for accountability and auditing.
-- **QR Code Integration**: Automatically generate scannable QR codes for each batch, linking directly to its respective detail page.
-- **Map View & Reporting**: Geographic distribution tracking and Excel-based summary exports for offline analysis.
+SIBIT (Sistem Informasi Bibit) is a web-based tracking and monitoring system designed for managing palm oil seedling batches from planting to distribution. The system enables real-time tracking, lifecycle monitoring, and status reporting to ensure optimal survival rates and efficient data management.
+
+## Features
+
+- **Batch Management** — Create, update, and manage seedling batch data including variety, location, and initial quantity.
+- **Real-time Tracking** — Monitor live seedling count with automatic mortality rate calculation.
+- **Interactive Dashboard** — View key metrics, survival percentages, and overall progress through a centralized interface.
+- **Audit Log** — Track all historical changes to batch statuses for accountability and traceability.
+- **QR Code Integration** — Automatically generate scannable QR codes for each batch, linking to its detail page.
+- **Map View and Reporting** — Geographic distribution tracking and Excel-based summary exports.
 
 ## Tech Stack
-- **Backend Framework**: FastAPI (Python)
-- **Database Architecture**: SQLModel utilizing SQLite (extensible to PostgreSQL via psycopg2)
-- **Frontend Layer**: HTML, Bootstrap 5, Jinja2 Templates
-- **Data Rendering**: Pandas, internal RESTful API structure
+
+| Component | Technology |
+|-----------|-----------|
+| Backend | FastAPI (Python) |
+| Database | SQLModel with SQLite |
+| Frontend | HTML, Bootstrap 5, Jinja2 Templates |
+| Data Processing | Pandas |
 
 ## Prerequisites
-- Python 3.9+
+
+- Python 3.9 or higher
 - pip (Python package installer)
 
-## Installation Guide
+## Installation
 
 1. **Clone the repository**
+
    ```bash
-   git clone https://github.com/Ihsan-p1/Sibit.git
+   git clone -b v1-web https://github.com/Ihsan-p1/Sibit.git
    cd Sibit
    ```
 
-2. **Set up the virtual environment**
+2. **Create and activate a virtual environment**
+
    ```bash
    python -m venv venv
    ```
-   Activate the environment:
-   - On Windows: `venv\Scripts\activate`
-   - On macOS/Linux: `source venv/bin/activate`
+
+   - Windows: `venv\Scripts\activate`
+   - macOS/Linux: `source venv/bin/activate`
 
 3. **Install dependencies**
+
    ```bash
-   pip install -r backend/requirements.txt
+   pip install -r requirements.txt
    ```
 
-4. **Environment Variables Configuration**
-   Create a `.env` file in the root directory. This project uses SQLite by default if `.env` or `DATABASE_URL` is omitted.
+4. **Configure environment variables**
+
+   Create a `.env` file in the root directory:
+
    ```env
    DATABASE_URL=sqlite:///sibit.db
    ```
 
-## Usage Instructions
+## Usage
 
-1. **Start the application**
-   Execute the `run.py` script to launch the FastAPI backend configured with Uvicorn.
+1. Start the application:
+
    ```bash
    python run.py
    ```
-2. **Access the application**
-   Open a web browser and navigate to `http://localhost:8000`.
+
+2. Open a browser and navigate to `http://localhost:8000`.
 
 ## Project Structure
-```text
+
+```
 SIBIT/
-|-- backend/
-|   |-- utils/         # Helper functions (e.g., QR Code generation)
-|   |-- db.py          # Database initialization and connection pool
-|   |-- main.py        # Core application routes and logic
-|   |-- models.py      # SQLModel schema definitions
-|   `-- requirements.txt
-|-- frontend/          # Jinja2 HTML templates
-|-- static/            # Static assets (uploads, generated QR codes)
-|-- .gitignore
-|-- run.py             # Entry point for development server
-`-- README.md
+├── backend/
+│   ├── utils/            # Helper functions (QR Code generation)
+│   ├── db.py             # Database initialization
+│   ├── main.py           # Application routes and logic
+│   ├── models.py         # SQLModel schema definitions
+│   └── requirements.txt
+├── frontend/             # Jinja2 HTML templates
+├── static/               # Static assets (uploads, QR codes)
+├── .gitignore
+├── run.py                # Development server entry point
+└── README.md
 ```
