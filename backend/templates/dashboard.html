@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - SIBIT</title>
+    <meta name="description" content="SIBIT Admin Dashboard - Kelola dan monitor bibit kelapa sawit">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <!-- ===== HEADER ===== -->
+    <header class="dashboard-header">
+        <div class="header-brand">
+            <div class="logo-icon">🌴</div>
+            <h2><span>SIBIT</span> Admin</h2>
+        </div>
+        <div class="header-actions">
+            <div class="user-badge">{{ username }}</div>
+            <a href="/admin/logout" class="btn-logout">Logout</a>
+        </div>
+    </header>
+
+    <!-- ===== NAVIGATION TABS ===== -->
+    <nav class="nav-tabs">
+        <button class="nav-tab active" onclick="switchTab('ringkasan')" id="tab-ringkasan">📊 Ringkasan</button>
+        <button class="nav-tab" onclick="switchTab('batches')" id="tab-batches">📋 Semua Batch</button>
+        <button class="nav-tab" onclick="switchTab('verifikasi')" id="tab-verifikasi">
+            ⏳ Verifikasi
+            <span class="nav-badge" id="pending-count" style="display:none;">0</span>
+        </button>
+        <button class="nav-tab" onclick="switchTab('verified')" id="tab-verified">✅ Terverifikasi</button>
+    </nav>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="main-content">
+        <!-- TAB 1: RINGKASAN -->
+        <div class="tab-panel active" id="panel-ringkasan">
+            <div class="summary-grid" id="summary-cards"></div>
+            <div class="section-header">
+                <h3>📈 Performa per Batch</h3>
+            </div>
+            <div id="perf-bars"></div>
+        </div>
+
+        <!-- TAB 2: SEMUA BATCH -->
+        <div class="tab-panel" id="panel-batches">
+            <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+                <div class="search-bar" style="margin-bottom:0;">
+                    <input type="text" placeholder="Cari batch ID, varietas, lokasi..." id="search-input"
+                        oninput="filterBatches()">
+                </div>
+                <div class="view-toggle">
+                    <button class="active" id="btn-card-view" onclick="setView('card')">🃏 Kartu</button>
+                    <button id="btn-table-view" onclick="setView('table')">📋 Tabel</button>
+                </div>
+            </div>
+            <!-- Card View -->
+            <div class="batch-card-grid" id="batch-card-view"></div>
+            <!-- Table View -->
+            <div class="table-wrapper" id="batch-table-view" style="display:none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Batch ID</th>
+                            <th>Varietas</th>
+                            <th>Lokasi</th>
+                            <th>Pekerja</th>
+                            <th>Hidup / Awal</th>
+                            <th>Survival</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="batch-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 3: VERIFIKASI -->
+        <div class="tab-panel" id="panel-verifikasi">
+            <div class="section-header">
+                <h3>Menunggu Verifikasi Admin</h3>
+            </div>
+            <div id="verify-card-view" class="batch-card-grid"></div>
+            <div class="empty-state" id="verify-empty" style="display:none;">
+                <div class="icon">📭</div>
+                <p>Semua data sudah diverifikasi</p>
+            </div>
+        </div>
+
+        <!-- TAB 4: TERVERIFIKASI -->
+        <div class="tab-panel" id="panel-verified">
+            <div class="section-header">
+                <h3>Data Terverifikasi</h3>
+            </div>
+            <div id="verified-card-view" class="batch-card-grid"></div>
+            <div class="empty-state" id="verified-empty" style="display:none;">
+                <div class="icon">📋</div>
+                <p>Belum ada data terverifikasi</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- TOAST -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- CONFIRM MODAL -->
+    <div class="modal-overlay" id="confirm-modal" style="display:none;">
+        <div class="modal-box">
+            <h3 id="modal-title">Konfirmasi</h3>
+            <p id="modal-message">Apakah Anda yakin?</p>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeModal()">Batal</button>
+                <button class="btn" id="modal-confirm-btn" onclick="confirmAction()">Ya</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TOKEN = '{{ token }}';
+        let allBatches = [];
+        let analyticsData = null;
+        let pendingAction = null;
+        let currentView = 'card';
+
+        document.addEventListener('DOMContentLoaded', loadDashboard);
+
+        async function loadDashboard() {
+            try {
+                const [batchRes, analyticsRes] = await Promise.all([
+                    fetch('/api/batches'),
+                    fetch('/api/analytics')
+                ]);
+                allBatches = (await batchRes.json()).data || [];
+                analyticsData = (await analyticsRes.json()).data || {};
+                renderAll();
+            } catch (e) {
+                showToast('Gagal memuat data: ' + e.message, 'error');
+            }
+        }
+
+        function renderAll() {
+            renderSummary();
+            renderPerfBars();
+            renderAllBatches();
+            renderVerification();
+            renderVerified();
+            updatePendingBadge();
+        }
+
+        // ===== HELPER: Survival classification =====
+        function getHealth(rate) {
+            if (rate >= 85) return { cls: 'good', label: '🟢 Sehat', color: '#2E7D32', colorLight: '#E8F5E9' };
+            if (rate >= 60) return { cls: 'warn', label: '🟡 Perlu Perhatian', color: '#f57c00', colorLight: '#fff3e0' };
+            return { cls: 'crit', label: '🔴 Kritis', color: '#e53935', colorLight: '#ffebee' };
+        }
+
+        // ===== SVG Circular Gauge =====
+        function circularGauge(rate, size = 72) {
+            const h = getHealth(rate);
+            const r = (size - 8) / 2;
+            const c = 2 * Math.PI * r;
+            const offset = c - (rate / 100) * c;
+            return `
+            <div class="gauge-wrapper" style="width:${size}px;height:${size}px;">
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#eee" stroke-width="6"/>
+                    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${h.color}" stroke-width="6"
+                        stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"
+                        style="transition:stroke-dashoffset 0.8s ease;"/>
+                </svg>
+                <div class="gauge-text">
+                    <span class="gauge-value" style="color:${h.color}">${rate.toFixed(0)}%</span>
+                    <span class="gauge-label">survival</span>
+                </div>
+            </div>
+        `;
+        }
+
+        // ===== TAB SWITCHING =====
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('panel-' + tab).classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+
+        // ===== SUMMARY CARDS =====
+        function renderSummary() {
+            const d = analyticsData;
+            if (!d) return;
+            const cards = [
+                { label: 'Total Bibit', value: d.total_bibit || 0, icon: '🌱', cls: 'blue' },
+                { label: 'Total Hidup', value: d.total_hidup || 0, icon: '💚', cls: 'green' },
+                { label: 'Angka Kematian', value: d.total_mati || 0, icon: '💀', cls: 'red' },
+                { label: 'Keberhasilan', value: (d.tingkat_keberhasilan || 0) + '%', icon: '📈', cls: 'teal' },
+                { label: 'Total Batch', value: d.total_batch || 0, icon: '📦', cls: 'indigo' },
+                { label: 'Terverifikasi', value: d.batch_verified || 0, icon: '✅', cls: 'green' },
+                { label: 'Menunggu', value: d.batch_pending || 0, icon: '⏳', cls: 'orange' },
+            ];
+            document.getElementById('summary-cards').innerHTML = cards.map(c => `
+            <div class="summary-card ${c.cls}">
+                <div class="card-icon-wrapper">${c.icon}</div>
+                <div class="card-value">${c.value}</div>
+                <div class="card-label">${c.label}</div>
+            </div>
+        `).join('');
+        }
+
+        // ===== PERFORMANCE BARS =====
+        function renderPerfBars() {
+            const batches = analyticsData?.batches || [];
+            if (!batches.length) {
+                document.getElementById('perf-bars').innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>Belum ada data</p></div>';
+                return;
+            }
+            document.getElementById('perf-bars').innerHTML = batches.map(b => {
+                const rate = b.survival_rate || 0;
+                const h = getHealth(rate);
+                return `
+                <div class="perf-item">
+                    <div class="perf-header">
+                        <span class="batch-name">${b.batch_id}</span>
+                        <span class="survival-text ${h.cls}">${rate.toFixed(1)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill ${h.cls}" style="width:${rate}%"></div>
+                    </div>
+                    <div class="perf-meta">${b.jumlah_hidup} / ${b.jumlah_awal} hidup · ${b.varietas} · <span class="health-badge ${h.cls}">${h.label}</span></div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        // ===== VIEW TOGGLE =====
+        function setView(view) {
+            currentView = view;
+            document.getElementById('btn-card-view').classList.toggle('active', view === 'card');
+            document.getElementById('btn-table-view').classList.toggle('active', view === 'table');
+            document.getElementById('batch-card-view').style.display = view === 'card' ? '' : 'none';
+            document.getElementById('batch-table-view').style.display = view === 'table' ? '' : 'none';
+        }
+
+        // ===== RENDER BATCH CARD =====
+        function batchCard(b, showActions = false) {
+            const awal = b.jumlah_awal || 0;
+            const hidup = b.jumlah_hidup || 0;
+            const rate = awal > 0 ? (hidup / awal * 100) : 0;
+            const h = getHealth(rate);
+            const badge = b.is_verified
+                ? '<span class="badge badge-verified">✅ Verified</span>'
+                : '<span class="badge badge-pending">⏳ Pending</span>';
+
+            let actions = '';
+            if (showActions) {
+                actions = `
+                <div class="card-bottom" style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;">
+                    <button class="btn btn-sm btn-approve" onclick="event.preventDefault();showConfirm('approve','${b.batch_id}')">✓ Setujui</button>
+                    <button class="btn btn-sm btn-reject" onclick="event.preventDefault();showConfirm('reject','${b.batch_id}')">✗ Tolak</button>
+                </div>
+            `;
+            }
+
+            return `
+            <a href="/admin/batch/${b.batch_id}" class="batch-card health-${h.cls}">
+                ${circularGauge(rate)}
+                <div class="batch-card-info">
+                    <div class="card-top">
+                        <span class="batch-name">${b.batch_id}</span>
+                        ${badge}
+                    </div>
+                    <div class="batch-meta"><span>Varietas:</span> ${b.varietas || '-'}</div>
+                    <div class="batch-meta"><span>Lokasi:</span> ${b.lokasi || '-'} · <span>Pekerja:</span> ${b.nama_pekerja || '-'}</div>
+                    <div class="card-bottom">
+                        <span style="font-size:13px;color:#555;">${hidup} / ${awal} hidup</span>
+                        <span class="health-badge ${h.cls}">${h.label}</span>
+                    </div>
+                    ${actions}
+                </div>
+            </a>
+        `;
+        }
+
+        // ===== ALL BATCHES =====
+        function renderAllBatches(filter = '') {
+            const filtered = allBatches.filter(b => {
+                const s = filter.toLowerCase();
+                return !s || (b.batch_id || '').toLowerCase().includes(s) || (b.varietas || '').toLowerCase().includes(s) || (b.lokasi || '').toLowerCase().includes(s);
+            });
+
+            // Card view
+            if (!filtered.length) {
+                document.getElementById('batch-card-view').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="icon">📋</div><p>Tidak ada data ditemukan</p></div>';
+                document.getElementById('batch-table-body').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:40px;">Tidak ada data</td></tr>';
+                return;
+            }
+
+            document.getElementById('batch-card-view').innerHTML = filtered.map(b => batchCard(b)).join('');
+
+            // Table view
+            document.getElementById('batch-table-body').innerHTML = filtered.map(b => {
+                const awal = b.jumlah_awal || 0;
+                const hidup = b.jumlah_hidup || 0;
+                const rate = awal > 0 ? (hidup / awal * 100) : 0;
+                const h = getHealth(rate);
+                const badge = b.is_verified ? '<span class="badge badge-verified">✅ Verified</span>' : '<span class="badge badge-pending">⏳ Pending</span>';
+                return `
+                <tr>
+                    <td><a class="batch-link" href="/admin/batch/${b.batch_id}">${b.batch_id}</a></td>
+                    <td>${b.varietas || '-'}</td>
+                    <td>${b.lokasi || '-'}</td>
+                    <td>${b.nama_pekerja || '-'}</td>
+                    <td>${hidup} / ${awal}</td>
+                    <td>
+                        <span class="survival-text ${h.cls}">${rate.toFixed(1)}%</span>
+                        <div class="progress-bar"><div class="progress-fill ${h.cls}" style="width:${rate}%"></div></div>
+                    </td>
+                    <td>${badge}</td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        function filterBatches() { renderAllBatches(document.getElementById('search-input').value); }
+
+        // ===== VERIFICATION =====
+        function renderVerification() {
+            const pending = allBatches.filter(b => !b.is_verified);
+            const container = document.getElementById('verify-card-view');
+            const empty = document.getElementById('verify-empty');
+            if (!pending.length) {
+                container.style.display = 'none';
+                empty.style.display = '';
+                return;
+            }
+            container.style.display = '';
+            empty.style.display = 'none';
+            container.innerHTML = pending.map(b => batchCard(b, true)).join('');
+        }
+
+        // ===== VERIFIED =====
+        function renderVerified() {
+            const verified = allBatches.filter(b => b.is_verified);
+            const container = document.getElementById('verified-card-view');
+            const empty = document.getElementById('verified-empty');
+            if (!verified.length) {
+                container.style.display = 'none';
+                empty.style.display = '';
+                return;
+            }
+            container.style.display = '';
+            empty.style.display = 'none';
+            container.innerHTML = verified.map(b => batchCard(b)).join('');
+        }
+
+        function updatePendingBadge() {
+            const count = allBatches.filter(b => !b.is_verified).length;
+            const badge = document.getElementById('pending-count');
+            badge.textContent = count;
+            badge.style.display = count > 0 ? '' : 'none';
+        }
+
+        // ===== VERIFY / REJECT =====
+        function showConfirm(action, batchId) {
+            pendingAction = { action, batchId };
+            const btn = document.getElementById('modal-confirm-btn');
+            if (action === 'approve') {
+                document.getElementById('modal-title').textContent = 'Setujui Batch?';
+                document.getElementById('modal-message').textContent = `Batch ${batchId} akan diverifikasi dan data akan diterapkan.`;
+                btn.className = 'btn btn-approve'; btn.textContent = 'Ya, Setujui';
+            } else {
+                document.getElementById('modal-title').textContent = 'Tolak Batch?';
+                document.getElementById('modal-message').textContent = `Batch ${batchId} akan ditolak dan dihapus dari sistem.`;
+                btn.className = 'btn btn-delete'; btn.textContent = 'Ya, Tolak';
+            }
+            document.getElementById('confirm-modal').style.display = '';
+        }
+        function closeModal() { document.getElementById('confirm-modal').style.display = 'none'; pendingAction = null; }
+
+        async function confirmAction() {
+            if (!pendingAction) return;
+            closeModal();
+            try {
+                const res = await fetch(`/api/batches/verify/${pendingAction.batchId}?action=${pendingAction.action}`, {
+                    method: 'PUT', headers: { 'Authorization': `Bearer ${TOKEN}` }
+                });
+                const data = await res.json();
+                if (res.ok) { showToast(data.message || 'Berhasil!', 'success'); await loadDashboard(); }
+                else { showToast(data.detail || 'Gagal', 'error'); }
+            } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = msg;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+
+</html>

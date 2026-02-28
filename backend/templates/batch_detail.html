@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch {{ batch_id }} - SIBIT Admin</title>
+    <meta name="description" content="Detail batch {{ batch_id }} - SIBIT Admin Dashboard">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <!-- ===== HEADER ===== -->
+    <header class="dashboard-header">
+        <div class="header-brand">
+            <div class="logo-icon">🌴</div>
+            <h2><span>SIBIT</span> Admin</h2>
+        </div>
+        <div class="header-actions">
+            <div class="user-badge">{{ username }}</div>
+            <a href="/admin/logout" class="btn-logout">Logout</a>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <a href="/admin/dashboard" class="detail-back">← Kembali ke Dashboard</a>
+
+        <div id="loading" style="text-align:center;padding:60px;">
+            <div class="spinner" style="width:32px;height:32px;"></div>
+            <p style="color:var(--text-muted);margin-top:12px;">Memuat data...</p>
+        </div>
+
+        <div id="detail-content" style="display:none;">
+            <div class="detail-header">
+                <div>
+                    <h1 id="batch-title"></h1>
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+                        <span id="batch-badge"></span>
+                        <span id="batch-health"></span>
+                    </div>
+                </div>
+                <div class="detail-actions" id="detail-actions"></div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="info-card">
+                    <h3>📋 Informasi Batch</h3>
+                    <div id="batch-info"></div>
+                </div>
+                <div class="info-card">
+                    <h3>📊 Statistik</h3>
+                    <div id="batch-stats"></div>
+                </div>
+            </div>
+
+            <div class="log-card">
+                <h3>📝 Riwayat Perubahan</h3>
+                <div id="audit-logs"></div>
+            </div>
+
+            <div class="log-card" id="photos-section" style="display:none;">
+                <h3>📸 Foto Dokumentasi</h3>
+                <div class="photo-grid" id="photo-gallery"></div>
+            </div>
+        </div>
+    </main>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <div class="modal-overlay" id="confirm-modal" style="display:none;">
+        <div class="modal-box">
+            <h3 id="modal-title">Konfirmasi</h3>
+            <p id="modal-message">Apakah Anda yakin?</p>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeModal()">Batal</button>
+                <button class="btn" id="modal-confirm-btn" onclick="confirmAction()">Ya</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BATCH_ID = '{{ batch_id }}';
+        const TOKEN = '{{ token }}';
+        let pendingAction = null;
+
+        function getHealth(rate) {
+            if (rate >= 85) return { cls: 'good', label: '🟢 Sehat', color: '#2E7D32' };
+            if (rate >= 60) return { cls: 'warn', label: '🟡 Perlu Perhatian', color: '#f57c00' };
+            return { cls: 'crit', label: '🔴 Kritis', color: '#e53935' };
+        }
+
+        function circularGauge(rate, size = 100) {
+            const h = getHealth(rate);
+            const r = (size - 10) / 2;
+            const c = 2 * Math.PI * r;
+            const offset = c - (rate / 100) * c;
+            return `
+            <div class="gauge-wrapper" style="width:${size}px;height:${size}px;margin:12px auto 0;">
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#eee" stroke-width="8"/>
+                    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${h.color}" stroke-width="8"
+                        stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"
+                        style="transition:stroke-dashoffset 0.8s ease;"/>
+                </svg>
+                <div class="gauge-text">
+                    <span class="gauge-value" style="color:${h.color};font-size:22px;">${rate.toFixed(1)}%</span>
+                    <span class="gauge-label">survival</span>
+                </div>
+            </div>
+        `;
+        }
+
+        document.addEventListener('DOMContentLoaded', loadBatchDetail);
+
+        async function loadBatchDetail() {
+            try {
+                const res = await fetch(`/api/batches/${BATCH_ID}`);
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.detail || 'Gagal memuat');
+
+                const { batch: b, logs, photos } = json.data;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('detail-content').style.display = '';
+
+                document.getElementById('batch-title').textContent = b.batch_id;
+                document.getElementById('batch-badge').innerHTML = b.is_verified
+                    ? '<span class="badge badge-verified">✅ Terverifikasi</span>'
+                    : '<span class="badge badge-pending">⏳ Menunggu Verifikasi</span>';
+
+                const awal = b.jumlah_awal || 0;
+                const hidup = b.jumlah_hidup || 0;
+                const rate = awal > 0 ? (hidup / awal * 100) : 0;
+                const h = getHealth(rate);
+
+                document.getElementById('batch-health').innerHTML = `<span class="health-badge ${h.cls}">${h.label}</span>`;
+
+                let actions = '';
+                if (!b.is_verified) {
+                    actions += `<button class="btn btn-sm btn-approve" onclick="showConfirm('approve')">✓ Setujui</button>`;
+                    actions += `<button class="btn btn-sm btn-reject" onclick="showConfirm('reject')">✗ Tolak</button>`;
+                }
+                actions += `<button class="btn btn-sm btn-delete" onclick="showConfirm('delete')">🗑 Hapus</button>`;
+                document.getElementById('detail-actions').innerHTML = actions;
+
+                const tanggal = b.tanggal_semai ? b.tanggal_semai.substring(0, 10) : '-';
+                document.getElementById('batch-info').innerHTML = `
+                <div class="info-row"><span class="label">Batch ID</span><span class="value">${b.batch_id}</span></div>
+                <div class="info-row"><span class="label">Varietas</span><span class="value">${b.varietas || '-'}</span></div>
+                <div class="info-row"><span class="label">Lokasi</span><span class="value">${b.lokasi || '-'}</span></div>
+                <div class="info-row"><span class="label">Pekerja</span><span class="value">${b.nama_pekerja || '-'}</span></div>
+                <div class="info-row"><span class="label">Tanggal Semai</span><span class="value">${tanggal}</span></div>
+                <div class="info-row"><span class="label">Status</span><span class="value">${b.status || '-'}</span></div>
+            `;
+
+                document.getElementById('batch-stats').innerHTML = `
+                <div class="info-row"><span class="label">Jumlah Awal</span><span class="value">${awal}</span></div>
+                <div class="info-row"><span class="label">Jumlah Hidup</span><span class="value">${hidup}</span></div>
+                <div class="info-row"><span class="label">Jumlah Mati</span><span class="value">${awal - hidup}</span></div>
+                <div class="info-row"><span class="label">Survival Rate</span><span class="value survival-text ${h.cls}">${rate.toFixed(1)}%</span></div>
+                ${circularGauge(rate)}
+            `;
+
+                if (logs && logs.length) {
+                    document.getElementById('audit-logs').innerHTML = logs.map(log => {
+                        const date = log.tanggal ? new Date(log.tanggal).toLocaleString('id-ID') : '-';
+                        const dotCls = log.is_verified ? 'verified' : 'pending';
+                        return `
+                        <div class="log-item">
+                            <div class="log-dot ${dotCls}"></div>
+                            <div class="log-content">
+                                <div class="aksi">${log.aksi}</div>
+                                <div class="meta">${date} · oleh ${log.nama_pekerja || 'Sistem'} · ${log.is_verified ? '✅ Verified' : '⏳ Pending'}</div>
+                                ${log.nilai_lama || log.nilai_baru ? `<div class="detail">${log.nilai_lama || '-'} → ${log.nilai_baru || '-'}</div>` : ''}
+                                ${log.keterangan ? `<div class="detail">📝 ${log.keterangan}</div>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('');
+                } else {
+                    document.getElementById('audit-logs').innerHTML = '<div class="empty-state"><div class="icon">📝</div><p>Belum ada riwayat perubahan</p></div>';
+                }
+
+                if (photos && photos.length) {
+                    document.getElementById('photos-section').style.display = '';
+                    document.getElementById('photo-gallery').innerHTML = photos.map(p => {
+                        const date = p.tanggal ? new Date(p.tanggal).toLocaleDateString('id-ID') : '-';
+                        return `
+                        <div class="photo-item">
+                            <img src="${p.photo_path}" alt="Foto batch" loading="lazy">
+                            <div class="photo-info">
+                                <p>${date}</p>
+                                ${p.catatan ? `<p>${p.catatan}</p>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            } catch (e) {
+                document.getElementById('loading').innerHTML = `<div class="empty-state"><div class="icon">❌</div><p>Gagal memuat: ${e.message}</p></div>`;
+            }
+        }
+
+        function showConfirm(action) {
+            pendingAction = action;
+            const btn = document.getElementById('modal-confirm-btn');
+            if (action === 'approve') {
+                document.getElementById('modal-title').textContent = 'Setujui Batch?';
+                document.getElementById('modal-message').textContent = `Batch ${BATCH_ID} akan diverifikasi.`;
+                btn.className = 'btn btn-approve'; btn.textContent = 'Ya, Setujui';
+            } else if (action === 'reject') {
+                document.getElementById('modal-title').textContent = 'Tolak Batch?';
+                document.getElementById('modal-message').textContent = `Batch ${BATCH_ID} akan ditolak dan dihapus.`;
+                btn.className = 'btn btn-delete'; btn.textContent = 'Ya, Tolak';
+            } else {
+                document.getElementById('modal-title').textContent = 'Hapus Batch?';
+                document.getElementById('modal-message').textContent = `Batch ${BATCH_ID} akan dihapus permanen.`;
+                btn.className = 'btn btn-delete'; btn.textContent = 'Ya, Hapus';
+            }
+            document.getElementById('confirm-modal').style.display = '';
+        }
+        function closeModal() { document.getElementById('confirm-modal').style.display = 'none'; pendingAction = null; }
+
+        async function confirmAction() {
+            if (!pendingAction) return;
+            const action = pendingAction;
+            closeModal();
+            try {
+                let res;
+                if (action === 'delete') {
+                    res = await fetch(`/api/batches/${BATCH_ID}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${TOKEN}` } });
+                } else {
+                    res = await fetch(`/api/batches/verify/${BATCH_ID}?action=${action}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${TOKEN}` } });
+                }
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(data.message || 'Berhasil!', 'success');
+                    if (action === 'delete' || action === 'reject') setTimeout(() => window.location.href = '/admin/dashboard', 1000);
+                    else await loadBatchDetail();
+                } else { showToast(data.detail || 'Gagal', 'error'); }
+            } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = msg;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+
+</html>
