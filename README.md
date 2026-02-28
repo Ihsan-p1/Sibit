@@ -1,8 +1,8 @@
-# SIBIT - Sistem Informasi Bibit Kelapa Sawit
+# SIBIT - Sistem Informasi Bibit 
 
 ## Overview
 
-SIBIT (Sistem Informasi Bibit) is an integrated monitoring platform for palm oil seedling management. Version 2 introduces a mobile-first architecture with offline capability, designed for field workers operating in areas with limited connectivity.
+SIBIT (Sistem Informasi Bibit) is an integrated monitoring platform for seedling management. Version 2 introduces a mobile-first architecture with offline capability, designed for field workers operating in areas with limited connectivity.
 
 The system consists of three components:
 
