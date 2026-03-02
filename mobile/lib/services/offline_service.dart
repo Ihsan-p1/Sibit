@@ -133,18 +133,18 @@ class OfflineService {
 
           if (type == 'create_batch') {
             await ApiService.createBatch(
-              batchId: data['batch_id'],
-              varietas: data['varietas'],
-              jumlahAwal: data['jumlah_awal'],
-              lokasi: data['lokasi'],
-              namaPekerja: data['nama_pekerja'],
+              batchId: data['batch_id'] as String,
+              varietas: data['varietas'] as String,
+              jumlahAwal: data['jumlah_awal'] is int ? data['jumlah_awal'] as int : int.parse(data['jumlah_awal'].toString()),
+              lokasi: data['lokasi'] as String,
+              namaPekerja: data['nama_pekerja'] as String,
             );
           } else if (type == 'update_batch') {
             await ApiService.updateBatch(
-              batchId: data['batch_id'],
-              jumlahHidup: data['jumlah_hidup'],
-              namaPekerja: data['nama_pekerja'],
-              catatan: data['catatan'],
+              batchId: data['batch_id'] as String,
+              jumlahHidup: data['jumlah_hidup'] is int ? data['jumlah_hidup'] as int : int.parse(data['jumlah_hidup'].toString()),
+              namaPekerja: data['nama_pekerja'] as String,
+              catatan: data['catatan'] as String?,
               photoPath: photoPath,
             );
           }

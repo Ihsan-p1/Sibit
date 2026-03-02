@@ -12,18 +12,31 @@ class AdminLoginScreen extends StatefulWidget {
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _totpController = TextEditingController();
   bool _isLoading = false;
+  bool _isTotpRequired = false;
   String? _error;
 
   Future<void> _login() async {
     setState(() { _isLoading = true; _error = null; });
     try {
-      await ApiService.login(_usernameController.text, _passwordController.text);
+      await ApiService.login(
+        _usernameController.text, 
+        _passwordController.text,
+        totpCode: _isTotpRequired ? _totpController.text : null,
+      );
       if (mounted) {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminDashboardScreen()));
       }
     } catch (e) {
-      setState(() => _error = 'Username atau Password salah');
+      if (e.toString().contains('TOTP_REQUIRED')) {
+        setState(() {
+          _isTotpRequired = true;
+          _error = 'Masukkan Kode 2FA Anda';
+        });
+      } else {
+        setState(() => _error = 'Username, Password, atau Kode 2FA salah');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -69,13 +82,23 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               TextField(
                 controller: _usernameController,
                 decoration: _inputDecoration('Username', Icons.person),
+                enabled: !_isTotpRequired,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _passwordController,
                 obscureText: true,
                 decoration: _inputDecoration('Password', Icons.lock),
+                enabled: !_isTotpRequired,
               ),
+              if (_isTotpRequired) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _totpController,
+                  keyboardType: TextInputType.number,
+                  decoration: _inputDecoration('Kode 2FA (Authenticator)', Icons.security),
+                ),
+              ],
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -120,6 +143,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _totpController.dispose();
     super.dispose();
   }
 }

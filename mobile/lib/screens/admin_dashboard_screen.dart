@@ -46,7 +46,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final result = await ApiService.verifyBatch(batchId, action);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Berhasil'), backgroundColor: Colors.green),
+          SnackBar(content: Text(result['message']?.toString() ?? 'Berhasil'), backgroundColor: Colors.green),
         );
         _loadData();
       }
@@ -73,7 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _openBatchDetail(String batchId) async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => BatchDetailScreen(batchId: batchId)),
+      MaterialPageRoute<bool>(builder: (_) => BatchDetailScreen(batchId: batchId)),
     );
     if (result == true) _loadData(); // Refresh if batch was deleted
   }
@@ -179,7 +179,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           const Text('Performa per Batch', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           ...(data['batches'] as List<dynamic>? ?? []).map((b) {
-            final rate = (b['survival_rate'] ?? 0).toDouble();
+            final rate = (b['survival_rate'] as num?)?.toDouble() ?? 0.0;
             final isHealthy = rate >= 85;
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -187,7 +187,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3)],
+                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 3)],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +195,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(b['batch_id'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(b['batch_id']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       Text('${rate.toStringAsFixed(1)}%',
                           style: TextStyle(fontWeight: FontWeight.bold, color: isHealthy ? Colors.green : Colors.red)),
                     ],
@@ -235,8 +235,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         itemCount: _batches.length,
         itemBuilder: (context, index) {
           final b = _batches[index];
-          final awal = b['jumlah_awal'] ?? 0;
-          final hidup = b['jumlah_hidup'] ?? 0;
+          final awal = (b['jumlah_awal'] as num?)?.toInt() ?? 0;
+          final hidup = (b['jumlah_hidup'] as num?)?.toInt() ?? 0;
           final survivalRate = awal > 0 ? (hidup / awal * 100) : 0.0;
           
           // 3-level health system
@@ -263,7 +263,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () => _openBatchDetail(b['batch_id']),
+              onTap: () => _openBatchDetail(b['batch_id'] as String),
               child: Container(
                 decoration: BoxDecoration(
                   border: Border(left: BorderSide(color: healthColor, width: 4)),
@@ -275,7 +275,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(b['batch_id'] ?? '',
+                        Text(b['batch_id']?.toString() ?? '',
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         _statusBadge(b['is_verified'] == true),
                       ],
@@ -347,8 +347,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         itemCount: batches.length,
         itemBuilder: (context, index) {
           final b = batches[index];
-          final survival = b['jumlah_awal'] > 0
-              ? (b['jumlah_hidup'] / b['jumlah_awal'] * 100).toStringAsFixed(1)
+          final awalNum = (b['jumlah_awal'] as num?)?.toInt() ?? 0;
+          final hidupNum = (b['jumlah_hidup'] as num?)?.toInt() ?? 0;
+          final survival = awalNum > 0
+              ? (hidupNum / awalNum * 100).toStringAsFixed(1)
               : '0.0';
 
           return Card(
@@ -356,7 +358,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () => _openBatchDetail(b['batch_id']),
+              onTap: () => _openBatchDetail(b['batch_id'] as String),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -365,14 +367,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(b['batch_id'] ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(b['batch_id']?.toString() ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         _statusBadge(b['is_verified'] == true),
                       ],
                     ),
                     const SizedBox(height: 8),
                     _detailRow('Varietas', b['varietas']?.toString() ?? '-'),
                     _detailRow('Pekerja', b['nama_pekerja']?.toString() ?? '-'),
-                    _detailRow('Hidup / Awal', '${b['jumlah_hidup']} / ${b['jumlah_awal']}'),
+                    _detailRow('Hidup / Awal', '$hidupNum / $awalNum'),
                     _detailRow('Kesehatan', '$survival%'),
                     if (showActions) ...[
                       const Divider(height: 24),
@@ -380,7 +382,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () => _verifyBatch(b['batch_id'], 'reject'),
+                              onPressed: () => _verifyBatch(b['batch_id'] as String, 'reject'),
                               icon: const Icon(Icons.close, size: 18),
                               label: const Text('Tolak'),
                               style: OutlinedButton.styleFrom(
@@ -393,7 +395,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () => _verifyBatch(b['batch_id'], 'approve'),
+                              onPressed: () => _verifyBatch(b['batch_id'] as String, 'approve'),
                               icon: const Icon(Icons.check, size: 18),
                               label: const Text('Setujui'),
                               style: ElevatedButton.styleFrom(
