@@ -31,7 +31,7 @@ class _UpdateBatchScreenState extends State<UpdateBatchScreen> {
       final data = await ApiService.getBatchDetails(widget.batchId);
       if (mounted) {
         setState(() {
-          _batchData = data['batch'];
+          _batchData = data['batch'] as Map<String, dynamic>?;
           _jumlahController.text = _batchData?['jumlah_hidup']?.toString() ?? '';
         });
       }
@@ -113,7 +113,7 @@ class _UpdateBatchScreenState extends State<UpdateBatchScreen> {
         final isOffline = result['offline'] == true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? 'Update berhasil!'),
+            content: Text(result['message']?.toString() ?? 'Update berhasil!'),
             backgroundColor: isOffline ? Colors.orange : Colors.green,
             duration: Duration(seconds: isOffline ? 4 : 2),
           ),
@@ -155,7 +155,7 @@ class _UpdateBatchScreenState extends State<UpdateBatchScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_batchData!['batch_id'] ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          Text(_batchData!['batch_id']?.toString() ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           _infoRow('Varietas', _batchData!['varietas']?.toString() ?? '-'),
                           _infoRow('Jumlah Awal', _batchData!['jumlah_awal']?.toString() ?? '-'),

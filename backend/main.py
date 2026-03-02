@@ -2,18 +2,24 @@ from fastapi import FastAPI, Depends, HTTPException, Query, File, Form, UploadFi
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 from typing import List, Optional
 import os
 import shutil
 import datetime
+import bleach
+import pyotp
+import secrets
 from fastapi import status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from itsdangerous import URLSafeSerializer
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Cloudinary (optional — works without it, falls back to local storage)
 try:
@@ -32,25 +38,68 @@ except ImportError:
     print("📁 Cloudinary package not installed — using local storage")
 
 from db import engine, get_session, create_db_and_tables
-from models import Batch, AuditLog, BatchPhoto, User
+from models import Batch, AuditLog, BatchPhoto, User, RefreshToken
 
-SECRET_KEY = os.getenv("SECRET_KEY", "sibit-secret-api-key-change-it")
+# STRICT SECRET_KEY - Crashes if not provided in production
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    # Only allow fallback if explicitly in DEV mode
+    if os.getenv("ENV", "prod").lower() == "dev":
+        SECRET_KEY = "sibit-secret-api-key-change-it"  # nosec B105
+    else:
+        raise ValueError("CRITICAL: SECRET_KEY environment variable is not set!")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 Week for mobile app sessions
+ACCESS_TOKEN_EXPIRE_MINUTES = 15 # Shortened to 15 mins
+REFRESH_TOKEN_EXPIRE_DAYS = 7 # 1 week refresh token
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="SIBIT APP Backend API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Allow CORS for Flutter Web / Emulators
+# Allowed Origins Config
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://10.0.2.2,http://127.0.0.1:3000,*").split(",")
+if "*" in ALLOWED_ORIGINS and os.getenv("ENV", "prod").lower() != "dev":
+    ALLOWED_ORIGINS.remove("*") # Disallow wildcards in production
+
+# Allow CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Hide server details
+    response.headers.pop("Server", None)
+    return response
+
+# Global Exception Handler to hide stack traces
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    
+    # Check if we are in dev mode
+    is_dev = os.getenv("ENV", "prod").lower() == "dev"
+    if is_dev:
+        return JSONResponse(status_code=500, content={"detail": str(exc)})
+    
+    print(f"Unhandled Server Error: {exc}")
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 # GZip compression — ~60% smaller JSON responses
 app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -125,7 +174,13 @@ def on_startup():
 # --- AUTH API ---
 
 @app.post("/api/login")
-async def login_api(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+@limiter.limit("5/minute")
+async def login_api(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    totp_code: Optional[str] = Form(None),
+    session: Session = Depends(get_session)
+):
     user = session.exec(select(User).where(User.username == form_data.username)).first()
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
@@ -133,11 +188,74 @@ async def login_api(form_data: OAuth2PasswordRequestForm = Depends(), session: S
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    # 2FA Enforcement
+    if user.totp_secret:
+        if not totp_code:
+            raise HTTPException(status_code=403, detail="TOTP_REQUIRED")
+        totp = pyotp.TOTP(user.totp_secret)
+        if not totp.verify(totp_code):
+            raise HTTPException(status_code=403, detail="Invalid 2FA Code")
+
     access_token_expires = datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer", "role": user.role}
+    
+    refresh_token_str = secrets.token_urlsafe(32)
+    refresh_token = RefreshToken(
+        token=refresh_token_str,
+        user_username=user.username,
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    session.add(refresh_token)
+    session.commit()
+    
+    return {
+        "access_token": access_token, 
+        "refresh_token": refresh_token_str,
+        "token_type": "bearer",  # nosec B105
+        "role": user.role
+    }
+
+@app.post("/api/refresh-token")
+async def refresh_token_api(refresh_token: str = Form(...), session: Session = Depends(get_session)):
+    db_token = session.exec(select(RefreshToken).where(RefreshToken.token == refresh_token)).first()
+    if not db_token or db_token.is_revoked or db_token.expires_at < datetime.datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+        
+    user = session.exec(select(User).where(User.username == db_token.user_username)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    access_token_expires = datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer", "role": user.role}  # nosec B105
+
+@app.post("/api/logout")
+async def logout_api(current_user: User = Depends(get_current_user), refresh_token: Optional[str] = Form(None), session: Session = Depends(get_session)):
+    if refresh_token:
+        db_token = session.exec(select(RefreshToken).where(RefreshToken.token == refresh_token, RefreshToken.user_username == current_user.username)).first()
+        if db_token:
+            db_token.is_revoked = True
+            session.add(db_token)
+            session.commit()
+    return {"status": "success", "message": "Logged out successfully"}
+
+@app.post("/api/2fa/setup")
+async def setup_2fa(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    if current_user.totp_secret:
+        return {"status": "error", "message": "2FA already configured"}
+    
+    secret = pyotp.random_base32()
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=current_user.username, issuer_name="SIBIT App")
+    
+    current_user.totp_secret = secret
+    session.add(current_user)
+    session.commit()
+    return {"status": "success", "secret": secret, "uri": uri}
 
 # --- MOBILE API ROUTES ---
 
@@ -175,13 +293,13 @@ async def create_batch_api(
 ):
     try:
         new_batch = Batch(
-            batch_id=batch_id,
-            varietas=varietas,
+            batch_id=bleach.clean(batch_id),
+            varietas=bleach.clean(varietas),
             jumlah_awal=jumlah_awal,
             jumlah_hidup=jumlah_awal,
-            lokasi=lokasi,
+            lokasi=bleach.clean(lokasi),
             tanggal_semai=datetime.datetime.utcnow(),
-            nama_pekerja=nama_pekerja,
+            nama_pekerja=bleach.clean(nama_pekerja),
             is_verified=False
         )
         session.add(new_batch)
@@ -207,14 +325,17 @@ async def update_batch_api(
     nilai_lama = db_batch.jumlah_hidup
     
     # Always create audit log for traceability
+    catatan_clean = bleach.clean(catatan) if catatan else None
+    pekerja_clean = bleach.clean(nama_pekerja)
+    
     aksi = "Update Jumlah Hidup" if nilai_lama != jumlah_hidup else "Update Catatan"
     log = AuditLog(
         batch_id=batch_id,
         aksi=aksi,
         nilai_lama=str(nilai_lama),
         nilai_baru=str(jumlah_hidup),
-        keterangan=catatan,
-        nama_pekerja=nama_pekerja,
+        keterangan=catatan_clean,
+        nama_pekerja=pekerja_clean,
         is_verified=False
     )
     session.add(log)
@@ -245,7 +366,7 @@ async def update_batch_api(
         new_photo = BatchPhoto(
             batch_id=batch_id,
             photo_path=photo_url,
-            catatan=f"Diunggah oleh: {nama_pekerja} - {catatan}"
+            catatan=f"Diunggah oleh: {pekerja_clean} - {catatan_clean}"
         )
         session.add(new_photo)
 

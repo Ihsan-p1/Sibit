@@ -7,6 +7,14 @@ class User(SQLModel, table=True):
     username: str = Field(index=True, unique=True)
     password_hash: str
     role: str = "admin" # admin, manager
+    totp_secret: Optional[str] = None # For 2FA/MFA Setup
+
+class RefreshToken(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    token: str = Field(index=True, unique=True)
+    user_username: str = Field(index=True)
+    expires_at: datetime
+    is_revoked: bool = Field(default=False)
 
 class Batch(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
