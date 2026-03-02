@@ -28,9 +28,9 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
       if (mounted) {
         setState(() {
           _batch = data['batch'] is Map<String, dynamic>
-              ? data['batch']
+              ? data['batch'] as Map<String, dynamic>
               : {'batch_id': widget.batchId};
-          _logs = data['logs'] ?? [];
+          _logs = (data['logs'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
           _isLoading = false;
         });
       }
@@ -141,8 +141,8 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
 
   Widget _buildStatsCard() {
     final b = _batch!;
-    final awal = b['jumlah_awal'] ?? 0;
-    final hidup = b['jumlah_hidup'] ?? 0;
+    final awal = (b['jumlah_awal'] as num?)?.toInt() ?? 0;
+    final hidup = (b['jumlah_hidup'] as num?)?.toInt() ?? 0;
     final mati = awal - hidup;
     final survivalRate = awal > 0 ? (hidup / awal * 100) : 0.0;
     final isHealthy = survivalRate >= 85;
@@ -250,7 +250,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                 ),
               )
             else
-              ..._logs.map((log) => _buildLogItem(log)),
+              ..._logs.map((log) => _buildLogItem(log as Map<String, dynamic>)),
           ],
         ),
       ),

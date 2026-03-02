@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # We are using PostgreSQL as requested
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_SERVER = os.getenv("POSTGRES_SERVER", "localhost")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "sibit_app")
@@ -15,7 +15,10 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "sibit_app")
 # Fallback to sqlite if postgres is not available during dev
 DATABASE_URL = "sqlite:///sibit_app.db"
 
-engine = create_engine(DATABASE_URL, echo=True)
+# Check if DB_ECHO is explicitly True (useful for development)
+DB_ECHO = os.getenv("DB_ECHO", "False").lower() in ("true", "1", "t")
+
+engine = create_engine(DATABASE_URL, echo=DB_ECHO)
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)

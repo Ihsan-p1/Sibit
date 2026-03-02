@@ -32,7 +32,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
         final isOffline = result['offline'] == true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? 'Batch berhasil didaftarkan!'),
+            content: Text(result['message']?.toString() ?? 'Batch berhasil didaftarkan!'),
             backgroundColor: isOffline ? Colors.orange : Colors.green,
             duration: Duration(seconds: isOffline ? 4 : 2),
           ),
