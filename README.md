@@ -1,134 +1,121 @@
-# SIBIT - Sistem Informasi Bibit 
+# SIBIT: Sistem Informasi Bibit
 
-## Overview
+SIBIT tracks seedling batches from nursery to field. Version 2 is built mobile first with
+an offline queue, because the people entering the data work in places where the network
+drops.
 
-SIBIT (Sistem Informasi Bibit) is an integrated monitoring platform for seedling management. Version 2 introduces a mobile-first architecture with offline capability, designed for field workers operating in areas with limited connectivity.
+Three parts:
 
-The system consists of three components:
-
-- **Backend API** — FastAPI-based REST API serving both mobile and web clients.
-- **Mobile Application** — Flutter-based app for field workers to record and update seedling data.
-- **Admin Dashboard** — Web-based interface for administrators to verify, approve, and monitor batch data.
+- Backend API: FastAPI, serving both the mobile app and the admin dashboard.
+- Mobile app: Flutter, for field workers recording and updating batch data.
+- Admin dashboard: server-rendered pages for verifying and monitoring batches.
 
 ## Features
 
-### Mobile Application
-- Add and update seedling batch data directly from the field
-- QR Code scanning for quick batch identification
-- Offline mode with local SQLite queue and automatic synchronization
-- Photo documentation with compression for low-bandwidth environments
+### Mobile app
+- Add and update seedling batch data in the field
+- QR code scanning to pull up a batch
+- Offline mode with a local SQLite queue that syncs when the network returns
+- Photo documentation, compressed before upload
+- Root and jailbreak detection, SSL pinning, and 2FA login (added in v2.1)
 
-### Admin Dashboard
-- Real-time overview with summary cards and survival rate statistics
-- Card and table view toggle for batch data visualization
-- Circular gauge indicators for survival rate per batch
-- Three-level health classification system (Healthy, Needs Attention, Critical)
+### Admin dashboard
+- Overview with summary cards and survival-rate statistics
+- Card and table views of batch data
+- Circular gauge per batch for survival rate
+- Health classification in three levels: healthy, needs attention, critical
 - Batch verification and approval workflow
-- Audit log with full change history
+- Audit log with the full change history
 
 ### Backend
-- RESTful API with JWT authentication for mobile and session-based auth for web
-- GZip response compression for reduced bandwidth usage
-- Cloudinary integration for cloud-based photo storage (optional, falls back to local storage)
-- SQLite database with SQLModel ORM
+- REST API with JWT for the mobile app and signed cookies for the dashboard
+- Refresh tokens, so a mobile session survives without a long-lived access token
+- TOTP two-factor authentication through `pyotp`
+- Rate limiting with `slowapi`, 5 requests per minute on login
+- Security headers on every response, including HSTS and `X-Frame-Options: DENY`
+- Input sanitising with `bleach`
+- GZip compression for responses over 500 bytes
+- Cloudinary photo storage when `CLOUDINARY_URL` is set, local disk otherwise
+- SQLModel over SQLite
 
-## Tech Stack
+## Tech stack
 
 | Component | Technology |
 |-----------|-----------|
 | Backend | FastAPI (Python 3.9+) |
-| Mobile App | Flutter (Dart) |
+| Mobile app | Flutter (Dart) |
 | Database | SQLModel with SQLite |
-| Web Dashboard | HTML, CSS, JavaScript, Jinja2 |
-| Photo Storage | Cloudinary (optional) / Local |
-| Authentication | JWT (mobile), Signed Cookies (web) |
+| Web dashboard | Jinja2 templates, HTML, CSS, JavaScript |
+| Photo storage | Cloudinary, or local disk |
+| Auth | JWT plus refresh tokens (mobile), signed cookies (web), TOTP 2FA |
 
 ## Prerequisites
 
 - Python 3.9 or higher
 - Flutter SDK 3.11 or higher
-- Android Studio or VS Code with Flutter extension
+- Android Studio, or VS Code with the Flutter extension
 
 ## Installation
 
 ### Backend
 
-1. **Clone the repository**
+```bash
+git clone https://github.com/Ihsan-p1/Sibit.git
+cd Sibit/backend
 
-   ```bash
-   git clone https://github.com/Ihsan-p1/Sibit.git
-   cd Sibit
-   ```
+python -m venv venv
+venv\Scripts\activate            # Windows
+source venv/bin/activate         # macOS, Linux
 
-2. **Create and activate a virtual environment**
+pip install -r requirements.txt
+```
 
-   ```bash
-   cd backend
-   python -m venv venv
-   ```
+Configuration is optional. To set a signing key and cloud photo storage, create
+`backend/.env`:
 
-   - Windows: `venv\Scripts\activate`
-   - macOS/Linux: `source venv/bin/activate`
+```env
+SECRET_KEY=your-secret-key
+CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+```
 
-3. **Install dependencies**
+Without `CLOUDINARY_URL`, photos go to `backend/static/uploads/`.
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+Start the server:
 
-4. **Configure environment variables** (optional)
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-   Create a `.env` file in the `backend/` directory:
+### Mobile app
 
-   ```env
-   SECRET_KEY=your-secret-key
-   CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-   ```
+```bash
+cd mobile
+flutter pub get
+```
 
-   If `CLOUDINARY_URL` is not set, photos will be saved to local storage.
+Set the server address in `lib/services/api_service.dart`:
 
-5. **Start the server**
+```dart
+static const String baseUrl = 'http://YOUR_SERVER_IP:8000';
+```
 
-   ```bash
-   uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
+Then:
 
-### Mobile Application
+```bash
+flutter run
+```
 
-1. **Navigate to the mobile directory**
+### Admin dashboard
 
-   ```bash
-   cd mobile
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   flutter pub get
-   ```
-
-3. **Configure the API endpoint**
-
-   Edit `lib/services/api_service.dart` and set `baseUrl` to your server address:
-
-   ```dart
-   static const String baseUrl = 'http://YOUR_SERVER_IP:8000';
-   ```
-
-4. **Run the application**
-
-   ```bash
-   flutter run
-   ```
-
-### Admin Dashboard
-
-The admin dashboard is served automatically by the backend at `/admin/login`. No separate setup is required.
+The backend serves it. No separate setup.
 
 - URL: `http://localhost:8000/admin/login`
-- Default credentials: `admin` / `admin123`
+- On an empty database, startup seeds one account: `admin` / `admin123`
 
-## Project Structure
+Change that password before the server is reachable by anyone else. The seed value is in
+this repository, so it is public knowledge.
+
+## Project structure
 
 ```
 SIBIT/
@@ -136,44 +123,48 @@ SIBIT/
 │   ├── static/
 │   │   ├── css/              # Dashboard stylesheets
 │   │   └── uploads/          # Local photo storage
-│   ├── templates/            # Jinja2 HTML templates
+│   ├── templates/            # Jinja2 templates
 │   │   ├── login.html
 │   │   ├── dashboard.html
 │   │   └── batch_detail.html
-│   ├── db.py                 # Database initialization
-│   ├── main.py               # API routes and web routes
-│   ├── models.py             # SQLModel schema definitions
+│   ├── db.py                 # Database initialisation and admin seeding
+│   ├── main.py               # API routes, dashboard routes, middleware
+│   ├── models.py             # SQLModel schema
+│   ├── migrate_lokasi.py     # One-off location migration
+│   ├── API_DOCS.md           # Endpoint reference
 │   └── requirements.txt
 ├── mobile/
 │   ├── lib/
 │   │   ├── screens/          # UI screens
-│   │   ├── services/         # API and offline services
-│   │   └── main.dart         # Application entry point
+│   │   ├── services/         # API client and offline queue
+│   │   └── main.dart
 │   └── pubspec.yaml
-├── .gitignore
 └── README.md
 ```
 
-## API Documentation
+## API
 
-The API is documented at `/docs` (Swagger UI) when the backend is running.
-
-Key endpoints:
+Swagger UI is at `/docs` while the backend runs. `backend/API_DOCS.md` has the written
+reference.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/login` | Authenticate user |
+| POST | `/api/login` | Authenticate, rate limited to 5 per minute |
+| POST | `/api/refresh-token` | Exchange a refresh token for a new access token |
+| POST | `/api/logout` | Revoke the current refresh token |
+| POST | `/api/2fa/setup` | Generate a TOTP secret and provisioning URI |
 | GET | `/api/batches` | List all batches |
-| GET | `/api/batches/{id}` | Get batch details |
-| POST | `/api/batches/create` | Create new batch |
+| GET | `/api/batches/{id}` | Batch details |
+| POST | `/api/batches/create` | Create a batch |
 | POST | `/api/batches/update/{id}` | Update batch data |
-| PUT | `/api/batches/verify/{id}` | Verify or reject batch |
-| GET | `/api/analytics` | Get dashboard analytics |
+| PUT | `/api/batches/verify/{id}` | Verify or reject a batch |
+| GET | `/api/analytics` | Dashboard analytics |
 | DELETE | `/api/batches/{id}` | Delete a batch |
 
-## Version History
+## Versions
 
 | Version | Description |
 |---------|-------------|
-| v1.0 | Web application using Flask with HTML/Bootstrap frontend |
-| v2.0 | Mobile-first architecture with FastAPI, Flutter, offline mode, and admin dashboard |
+| v1.0 | Web application on Flask with an HTML and Bootstrap frontend. Kept on the `v1-web` branch. |
+| v2.0 | Mobile-first rebuild: FastAPI, Flutter, offline mode, admin dashboard |
+| v2.1 | Refresh tokens, 2FA, security headers, rate limiting; SSL pinning and root detection on mobile |
