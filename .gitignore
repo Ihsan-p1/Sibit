@@ -32,3 +32,6 @@ mobile/pubspec.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# AI assistant files, local only
+.claude/
